@@ -549,6 +549,41 @@ function runTests(baseopts) {
           });
         });
     });
+    it('should correctly watch subsequently added glob patters for deep subdirectories', function(done) {
+      var spy = sinon.spy();
+      fs.mkdirSync(getFixturePath('subdir'), 0x1ed);
+      fs.mkdirSync(getFixturePath('subdir/sub2'), 0x1ed);
+      fs.mkdirSync(getFixturePath('subdir/sub2/sub3'), 0x1ed);
+      fs.writeFileSync(getFixturePath('subdir/sub2/a.txt'), 'a');
+      fs.writeFileSync(getFixturePath('subdir/sub2/b.xml'), 'b');
+      fs.writeFileSync(getFixturePath('subdir/sub2/sub3/c.ini'), 'c');
+      w(function() {
+        watcher = chokidar.watch(getFixturePath('subdir/**/*.txt'), options)
+          .on('all', spy)
+          .on('ready', function(){
+            watcher.add(getFixturePath('subdir/**/*.xml'));
+            watcher.add(getFixturePath('subdir/**/*.ini'));
+            w(function(){
+              fs.unlink(getFixturePath('subdir/sub2/a.txt'), simpleCb);
+              fs.unlink(getFixturePath('subdir/sub2/b.xml'), simpleCb);
+              fs.unlink(getFixturePath('subdir/sub2/sub3/c.ini'), simpleCb);
+            })();
+          });
+        waitFor([[spy.withArgs('add'),3],[spy.withArgs('unlink'),3]], function() {
+          spy.withArgs('add').should.have.been.calledThrice;
+          spy.should.have.been.calledWith('add', getFixturePath('subdir/sub2/a.txt'));
+          spy.should.have.been.calledWith('add', getFixturePath('subdir/sub2/b.xml'));
+          spy.should.have.been.calledWith('add', getFixturePath('subdir/sub2/sub3/c.ini'));
+          spy.should.have.been.calledWith('unlink', getFixturePath('subdir/sub2/a.txt'));
+          spy.should.have.been.calledWith('unlink', getFixturePath('subdir/sub2/b.xml'));
+          spy.should.have.been.calledWith('unlink', getFixturePath('subdir/sub2/sub3/c.ini'));
+          if (!node010) {
+            spy.withArgs('unlink').should.have.been.calledThrice;
+          }
+          done();
+        });
+      }, win32Polling010 ? 300 : undefined)();
+    });
     it('should traverse subdirs to match globstar patterns', function(done) {
       var spy = sinon.spy();
       var watchPath = getFixturePath('../../test-*/' + subdir + '/**/a*.txt');
